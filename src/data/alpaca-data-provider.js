@@ -1,9 +1,10 @@
 import { MarketDataProvider } from './market-data-provider.js';
 
 export class AlpacaDataProvider extends MarketDataProvider {
-  constructor({ apiKey, apiSecret, feed = 'iex', fetchFn = globalThis.fetch }) { super(); Object.assign(this, { apiKey, apiSecret, feed, fetchFn }); }
+  constructor({ apiKey, apiSecret, symbols = [], feed = 'iex', fetchFn = globalThis.fetch }) { super(); Object.assign(this, { apiKey, apiSecret, symbols, feed, fetchFn }); }
   headers() { return { 'APCA-API-KEY-ID': this.apiKey, 'APCA-API-SECRET-KEY': this.apiSecret }; }
-  async getSnapshot(symbols) {
+  async getSnapshot(symbols = this.symbols) {
+    if (!symbols.length) throw new Error('Alpaca market data requires at least one symbol');
     const url = `https://data.alpaca.markets/v2/stocks/snapshots?symbols=${encodeURIComponent(symbols.join(','))}&feed=${this.feed}`;
     const response = await this.fetchFn(url, { headers: this.headers() });
     if (!response.ok) throw new Error(`Alpaca market data failed (${response.status})`);
