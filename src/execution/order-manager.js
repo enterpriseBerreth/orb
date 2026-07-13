@@ -6,4 +6,9 @@ export class OrderManager {
     const fill = this.broker.submit({ ...signal, quantity: decision.quantity, orderType: 'market' });
     this.journal.record('order_filled', { order: fill }); return fill;
   }
+  close(symbol, exitPrice, notes) {
+    const trade = this.broker.close(symbol, exitPrice, notes);
+    if (trade) this.journal.record('position_closed', { trade });
+    return trade;
+  }
 }

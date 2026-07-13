@@ -6,6 +6,15 @@ export class PaperBroker extends Broker {
     const fill = { ...order, id: crypto.randomUUID(), status: 'filled', filledAt: new Date().toISOString() };
     this.orders.unshift(fill); this.openPositions.set(order.symbol, fill); this.portfolio?.applyFill(fill); return fill;
   }
+  close(symbol, exitPrice, notes = '') {
+    const fill = this.openPositions.get(symbol);
+    if (!fill) return null;
+    const capitalBefore = this.portfolio?.snapshot().capital;
+    const closed = this.portfolio?.close(symbol, exitPrice);
+    this.openPositions.delete(symbol);
+    const trade = { ...fill, ...closed, stockName: symbol, capitalBefore, capitalAfter: this.portfolio?.snapshot().capital, notes, status: 'closed', closedAt: new Date().toISOString() };
+    this.orders.unshift(trade); return trade;
+  }
   cancel(orderId) { return { id: orderId, status: 'cancelled' }; }
   positions() { return [...this.openPositions.values()]; }
   status() { return { mode: 'paper', account: this.account(), orders: this.orders.slice(0, 20), positions: this.positions() }; }

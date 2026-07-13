@@ -10,6 +10,9 @@ export const config = Object.freeze({
   maxPortfolioRisk: number(process.env.MAX_PORTFOLIO_RISK, 300),
   scannerTopN: number(process.env.SCANNER_TOP_N, 10),
   tradeCandidates: number(process.env.TRADE_CANDIDATES, 3),
+  initialCapital: number(process.env.INITIAL_CAPITAL, 10_000),
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
+  telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
   broker: process.env.BROKER ?? 'paper',
   symbols: (process.env.SYMBOLS ?? 'NVDA,TSLA,AMD,MSFT,AAPL,META,AMZN,GOOGL,NFLX,COIN,PLTR,SMCI').split(',').map((symbol) => symbol.trim()).filter(Boolean)
 });
