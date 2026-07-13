@@ -1,0 +1,16 @@
+import { config } from './config.js';
+import { TradeJournal } from './analytics/journal.js';
+import { SimulatedMarketDataFeed } from './data/simulated-feed.js';
+import { MarketScanner } from './scanner/scanner.js';
+import { RiskManager } from './risk/risk-manager.js';
+import { PaperBroker } from './paper/paper-broker.js';
+import { PortfolioManager } from './portfolio/portfolio-manager.js';
+import { OrderManager } from './execution/order-manager.js';
+import { TradingBot } from './core/bot.js';
+import { createServer } from './dashboard/server.js';
+if (!config.paperTrading) throw new Error('Live trading is disabled in this starter. Set PAPER_TRADING=true.');
+const journal = new TradeJournal(); const portfolio = new PortfolioManager(); const broker = new PaperBroker({ portfolio });
+const bot = new TradingBot({ feed: new SimulatedMarketDataFeed(config.symbols), scanner: new MarketScanner(), journal, orderManager: new OrderManager({ broker, journal, risk: new RiskManager(config) }) });
+bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message }));
+setInterval(() => bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message })), config.loopMs);
+createServer({ bot, broker, journal }).listen(config.port, () => console.log(`ORB paper bot listening on :${config.port}`));
