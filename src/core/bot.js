@@ -12,7 +12,7 @@ export class TradingBot {
       const target = position.side === 'buy' ? market.price >= position.price + (position.price - position.stopPrice) : market.price <= position.price - (position.stopPrice - position.price);
       if (stopped || target) {
         const notes = stopped ? 'Stopped out at the defined risk level.' : 'Exited at a one-to-one risk/reward target.';
-        const trade = this.orderManager.close(market.symbol, market.price, notes);
+        const trade = await this.orderManager.close(market.symbol, market.price, notes);
         if (trade) await this.notifier?.sendTradeExit(trade);
       }
     }
@@ -24,7 +24,7 @@ export class TradingBot {
       const range = this.ranges.get(market.symbol) ?? { high: market.price * 1.0002, low: market.price * 0.9998 };
       this.ranges.set(market.symbol, range);
       const signal = evaluateOrb({ ...market, openingRange: range });
-      if (passesFilters(signal, market)) this.orderManager.execute(signal);
+      if (passesFilters(signal, market)) await this.orderManager.execute(signal);
     }
     this.journal.record('scan_complete', { candidates: ranked.length, focusedCandidates: Math.min(ranked.length, this.tradeCandidates), entriesAllowed: true }); return ranked;
   }

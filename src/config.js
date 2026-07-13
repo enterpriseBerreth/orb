@@ -14,5 +14,10 @@ export const config = Object.freeze({
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
   broker: process.env.BROKER ?? 'paper',
+  marketDataProvider: process.env.MARKET_DATA_PROVIDER ?? 'simulated',
+  alpacaApiKey: process.env.ALPACA_API_KEY ?? '',
+  alpacaApiSecret: process.env.ALPACA_API_SECRET ?? '',
+  alpacaTradingBaseUrl: process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.alpaca.markets',
+  alpacaDataFeed: process.env.ALPACA_DATA_FEED ?? 'iex',
   symbols: (process.env.SYMBOLS ?? 'NVDA,TSLA,AMD,MSFT,AAPL,META,AMZN,GOOGL,NFLX,COIN,PLTR,SMCI').split(',').map((symbol) => symbol.trim()).filter(Boolean)
 });

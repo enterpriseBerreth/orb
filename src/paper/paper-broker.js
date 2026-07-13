@@ -2,6 +2,7 @@ import { Broker } from '../execution/broker.js';
 export class PaperBroker extends Broker {
   constructor({ portfolio } = {}) { super(); this.orders = []; this.openPositions = new Map(); this.realizedPnl = 0; this.portfolio = portfolio; }
   account() { const state = this.portfolio?.snapshot(); return { realizedPnl: state?.realizedPnl ?? this.realizedPnl, openPositions: state?.openPositions ?? this.openPositions.size, openRisk: 0 }; }
+  hasOpenPosition(symbol) { return this.openPositions.has(symbol); }
   submit(order) {
     const fill = { ...order, id: crypto.randomUUID(), status: 'filled', filledAt: new Date().toISOString() };
     this.orders.unshift(fill); this.openPositions.set(order.symbol, fill); this.portfolio?.applyFill(fill); return fill;
