@@ -1,5 +1,5 @@
 import { MarketDataProvider } from './market-data-provider.js';
-const bases = { ES: 5300, NQ: 19000, CL: 78, GC: 2400 };
+const bases = { NVDA: 175, TSLA: 320, AMD: 155, MSFT: 500, AAPL: 210, META: 720, AMZN: 230, GOOGL: 190, NFLX: 1200, COIN: 350, PLTR: 150, SMCI: 45 };
 export class SimulatedMarketDataFeed extends MarketDataProvider {
   constructor(symbols) { super(); this.symbols = symbols; this.prices = new Map(symbols.map((s) => [s, bases[s] ?? 100])); }
   snapshot() {
@@ -7,7 +7,9 @@ export class SimulatedMarketDataFeed extends MarketDataProvider {
       const prior = this.prices.get(symbol);
       const price = Number((prior * (1 + ((Math.random() - 0.5) * 0.001))).toFixed(2));
       this.prices.set(symbol, price);
-      return { symbol, price, volume: Math.floor(500 + Math.random() * 3000), relativeVolume: Number((0.7 + Math.random() * 2).toFixed(2)), liquidity: 'high', timestamp: new Date().toISOString() };
+      const relativeVolume = Number((0.7 + Math.random() * 2).toFixed(2));
+      const premarketGapPercent = Number(((Math.random() - 0.35) * 12).toFixed(2));
+      return { symbol, price, volume: Math.floor(500 + Math.random() * 3000), relativeVolume, premarketGapPercent, expectedVolatility: Number((Math.abs(premarketGapPercent) * relativeVolume).toFixed(2)), liquidity: 'high', timestamp: new Date().toISOString() };
     });
   }
   async getSnapshot() { return this.snapshot(); }

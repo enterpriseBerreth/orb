@@ -8,6 +8,8 @@ export const config = Object.freeze({
   maxOpenPositions: number(process.env.MAX_OPEN_POSITIONS, 3),
   riskPerTrade: number(process.env.RISK_PER_TRADE, 100),
   maxPortfolioRisk: number(process.env.MAX_PORTFOLIO_RISK, 300),
+  scannerTopN: number(process.env.SCANNER_TOP_N, 10),
+  tradeCandidates: number(process.env.TRADE_CANDIDATES, 3),
   broker: process.env.BROKER ?? 'paper',
-  symbols: (process.env.SYMBOLS ?? 'ES,NQ,CL,GC').split(',').map((symbol) => symbol.trim()).filter(Boolean)
+  symbols: (process.env.SYMBOLS ?? 'NVDA,TSLA,AMD,MSFT,AAPL,META,AMZN,GOOGL,NFLX,COIN,PLTR,SMCI').split(',').map((symbol) => symbol.trim()).filter(Boolean)
 });
