@@ -16,7 +16,7 @@ export class AlpacaDataProvider extends MarketDataProvider {
       if (!Number.isFinite(price) || !price) return [];
       const premarketGapPercent = previousClose ? ((price - previousClose) / previousClose) * 100 : 0;
       // Daily volume is intentionally a conservative proxy until premarket-volume data is added.
-      const relativeVolume = Math.max(1, Number((volume / Math.max(1, snapshot.prevDailyBar?.v ?? volume) * 100).toFixed(2)));
+      const relativeVolume = Math.max(1, Number((volume / Math.max(1, snapshot.prevDailyBar?.v ?? volume)).toFixed(2)));
       return [{ symbol, price, volume, relativeVolume, premarketGapPercent: Number(premarketGapPercent.toFixed(2)), expectedVolatility: Number((Math.abs(premarketGapPercent) * relativeVolume).toFixed(2)), liquidity: snapshot.latestQuote ? 'high' : 'unknown', timestamp: snapshot.latestTrade?.t ?? new Date().toISOString() }];
     });
   }

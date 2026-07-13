@@ -1,7 +1,8 @@
 import http from 'node:http';
 import { calculateMetrics } from '../analytics/metrics.js';
 export function createServer({ bot, broker, journal }) {
-  return http.createServer((req, res) => {
+  return http.createServer(async (req, res) => {
+    if (req.url === '/status') await broker.account();
     const body = req.url === '/health' ? { status: 'ok' }
       : req.url === '/status' ? { bot: 'running', paperTrading: true, broker: broker.status(), metrics: calculateMetrics(broker.orders), candidates: bot.lastScan, events: journal.recent(20) }
       : null;
