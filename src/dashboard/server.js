@@ -2,10 +2,11 @@ import http from 'node:http';
 import { calculateMetrics } from '../analytics/metrics.js';
 export function createServer({ bot, broker, journal, persistence }) {
   return http.createServer(async (req, res) => {
+    const url = new URL(req.url, 'http://localhost');
     if (req.url === '/status') await broker.account();
     const body = req.url === '/health' ? { status: 'ok' }
       : req.url === '/status' ? { bot: 'running', paperTrading: true, broker: broker.status(), metrics: calculateMetrics(broker.orders), candidates: bot.lastScan, events: journal.recent(20) }
-      : req.url.startsWith('/history') ? { events: await persistence.recentEvents(200) }
+      : url.pathname === '/history' ? { events: url.searchParams.get('date') ? await persistence.eventsForTradingDate(url.searchParams.get('date')) : await persistence.recentEvents(200) }
       : null;
     if (req.url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(dashboardHtml); }
     if (!body) { res.writeHead(404); return res.end(JSON.stringify({ error: 'not found' })); }

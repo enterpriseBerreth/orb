@@ -7,6 +7,7 @@ export class NullPersistence {
   async upsertOpeningRange() {}
   async getOpeningRange() { return null; }
   async recentEvents() { return []; }
+  async eventsForTradingDate() { return []; }
 }
 
 export class PostgresPersistence {
@@ -35,6 +36,12 @@ export class PostgresPersistence {
   }
   async recentEvents(limit = 100) {
     const { rows } = await this.pool.query('SELECT id, occurred_at, event_type, payload FROM journal_events ORDER BY occurred_at DESC LIMIT $1', [limit]);
+    return rows.map((row) => ({ id: row.id, at: row.occurred_at, type: row.event_type, ...row.payload }));
+  }
+  async eventsForTradingDate(tradingDate, limit = 5000) {
+    const { rows } = await this.pool.query(`SELECT id, occurred_at, event_type, payload FROM journal_events
+      WHERE (occurred_at AT TIME ZONE 'America/New_York')::date = $1
+      ORDER BY occurred_at DESC LIMIT $2`, [tradingDate, limit]);
     return rows.map((row) => ({ id: row.id, at: row.occurred_at, type: row.event_type, ...row.payload }));
   }
 }
