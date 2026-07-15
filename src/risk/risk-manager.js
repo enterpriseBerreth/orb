@@ -1,12 +1,15 @@
 export class RiskManager {
-  constructor({ maxDailyLoss, maxOpenPositions, riskPerTrade, maxPortfolioRisk = Infinity }) { Object.assign(this, { maxDailyLoss, maxOpenPositions, riskPerTrade, maxPortfolioRisk }); }
+  constructor({ maxDailyLoss, maxOpenPositions, riskPerTradePercent = 1, initialCapital = 1_000, maxPortfolioRisk = Infinity, maxPerCorrelationGroup = 1 }) { Object.assign(this, { maxDailyLoss, maxOpenPositions, riskPerTradePercent, initialCapital, maxPortfolioRisk, maxPerCorrelationGroup }); }
   approve(signal, account) {
     if (account.realizedPnl <= -this.maxDailyLoss) return { approved: false, reason: 'daily-loss-limit' };
     if (account.openPositions >= this.maxOpenPositions) return { approved: false, reason: 'position-limit' };
     if ((account.openRisk ?? 0) >= this.maxPortfolioRisk) return { approved: false, reason: 'portfolio-risk-limit' };
-    const riskPerUnit = Math.abs(signal.price - signal.stopPrice);
+    if (signal.correlationGroup && (account.openCorrelationGroups ?? []).filter((group) => group === signal.correlationGroup).length >= this.maxPerCorrelationGroup) return { approved: false, reason: 'correlation-group-limit' };
+    const riskPerUnit = signal.exitPlan?.riskPerShare ?? Math.abs(signal.price - signal.stopPrice);
     if (!riskPerUnit) return { approved: false, reason: 'invalid-stop' };
-    const quantity = Math.max(1, Math.floor(this.riskPerTrade / riskPerUnit));
-    return { approved: true, quantity, estimatedRisk: Number((riskPerUnit * quantity).toFixed(2)) };
+    const riskCapital = Math.min(Number(account.capital) || this.initialCapital, this.initialCapital);
+    const riskBudget = Number((riskCapital * (this.riskPerTradePercent / 100)).toFixed(2));
+    const quantity = Math.max(1, Math.floor(riskBudget / riskPerUnit));
+    return { approved: true, quantity, estimatedRisk: Number((riskPerUnit * quantity).toFixed(2)), riskBudget };
   }
 }

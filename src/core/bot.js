@@ -1,11 +1,23 @@
 import { evaluateOrb } from '../strategies/orb.js';
 import { passesFilters } from '../filters/signal-filter.js';
 import { easternTradingDate, isUsOpeningHour, usMarketSessionPhase } from './market-session.js';
+import { analyzeRegime } from '../research/regime-analyzer.js';
+import { buildExitPlan } from '../risk/exit-plan.js';
 export class TradingBot {
-  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; }
+  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, exitConfig = {}, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, exitConfig, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; }
   async cycle(date = new Date()) {
     const universe = await this.feed.getSnapshot(); const ranked = this.scanner.rank(universe); this.lastUniverse = universe; this.lastScan = ranked;
     const phase = usMarketSessionPhase(date); const tradingDate = easternTradingDate(date);
+    for (const trade of await this.orderManager.broker.reconcileExits?.() ?? []) {
+      this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade);
+    }
+    if (this.orderManager.broker.usesNativeBrackets) for (const position of [...this.orderManager.broker.openPositions.values()]) {
+      const heldMinutes = (date - new Date(position.filledAt)) / 60_000;
+      if (position.exitPlan?.maxHoldMinutes && heldMinutes >= position.exitPlan.maxHoldMinutes) {
+        const trade = await this.orderManager.close(position.symbol, position.price, 'Time stop: bracket was closed after the maximum validated holding period.');
+        if (trade) { this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade); }
+      }
+    }
     if (phase === 'building-opening-range') {
       if (this.rangeDate !== tradingDate) { this.ranges.clear(); this.rangeDate = tradingDate; }
       for (const market of universe) {
@@ -15,7 +27,7 @@ export class TradingBot {
       }
       this.journal.record('opening_range_update', { candidates: ranked.length, universeSymbols: universe.length, rangeDate: tradingDate }); return ranked;
     }
-    for (const market of ranked) {
+    if (!this.orderManager.broker.usesNativeBrackets) for (const market of ranked) {
       const position = this.orderManager.broker.openPositions.get(market.symbol);
       if (!position) continue;
       const stopped = position.side === 'buy' ? market.price <= position.stopPrice : market.price >= position.stopPrice;
@@ -33,11 +45,13 @@ export class TradingBot {
     for (const [rank, market] of ranked.slice(0, this.tradeCandidates).entries()) {
       const range = this.rangeDate === tradingDate ? this.ranges.get(market.symbol) : await this.persistence?.getOpeningRange(tradingDate, market.symbol);
       if (!range) { this.recordSkip(market, rank + 1, 'no-opening-range', null); continue; }
+      const bars = await this.feed.getBars(market.symbol, 30); const regime = analyzeRegime(market, bars, date);
       const signal = evaluateOrb({ ...market, openingRange: range, breakoutBufferPercent: this.breakoutBufferPercent });
       if (!signal) { this.recordSkip(market, rank + 1, 'no-confirmed-buffered-breakout', range); continue; }
       if (!passesFilters(signal, market)) { this.recordSkip(market, rank + 1, 'strategy-filter-rejected', range); continue; }
-      const outcome = await this.orderManager.execute({ ...signal, scannerRank: rank + 1, scannerScore: market.score });
-      this.journal.record('signal_evaluated', { symbol: market.symbol, rank: rank + 1, decision: outcome?.type ?? outcome?.status ?? 'submitted', signal, range });
+      const exitPlan = buildExitPlan(signal, regime, this.exitConfig); const enrichedSignal = { ...signal, stopPrice: exitPlan.stopPrice, exitPlan, ...regime, scannerRank: rank + 1, scannerScore: market.score };
+      const outcome = await this.orderManager.execute(enrichedSignal);
+      this.journal.record('signal_evaluated', { symbol: market.symbol, rank: rank + 1, decision: outcome?.type ?? outcome?.status ?? 'submitted', signal: enrichedSignal, range, regime });
     }
     this.journal.record('scan_complete', { candidates: ranked.length, focusedCandidates: Math.min(ranked.length, this.tradeCandidates), entriesAllowed: true, openingRangeReady: this.rangeDate === tradingDate }); return ranked;
   }

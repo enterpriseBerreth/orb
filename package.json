@@ -11,6 +11,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test",
-    "backtest": "node src/backtesting/run-demo.js"
+    "backtest": "node src/backtesting/run-demo.js",
+    "research": "node src/backtesting/run-alpaca-research.js"
   }
 }

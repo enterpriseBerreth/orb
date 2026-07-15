@@ -20,7 +20,7 @@ const journal = new TradeJournal({ persistence }); const portfolio = new Portfol
 const broker = config.broker === 'alpaca-paper' ? new AlpacaPaperBroker({ apiKey: config.alpacaApiKey, apiSecret: config.alpacaApiSecret, baseUrl: config.alpacaTradingBaseUrl }) : new PaperBroker({ portfolio });
 const feed = config.marketDataProvider === 'alpaca' ? new AlpacaDataProvider({ apiKey: config.alpacaApiKey, apiSecret: config.alpacaApiSecret, symbols: config.symbols, feed: config.alpacaDataFeed }) : new SimulatedMarketDataFeed(config.symbols);
 const notifier = new TelegramNotifier({ token: config.telegramBotToken, chatId: config.telegramChatId });
-const bot = new TradingBot({ feed, scanner: new MarketScanner({ topN: config.scannerTopN }), journal, persistence, notifier, tradeCandidates: config.tradeCandidates, breakoutBufferPercent: config.orbBreakoutBufferPercent, orderManager: new OrderManager({ broker, journal, risk: new RiskManager(config) }) });
+const bot = new TradingBot({ feed, scanner: new MarketScanner({ topN: config.scannerTopN }), journal, persistence, notifier, tradeCandidates: config.tradeCandidates, breakoutBufferPercent: config.orbBreakoutBufferPercent, exitConfig: config, orderManager: new OrderManager({ broker, journal, risk: new RiskManager(config) }) });
 const nightlyReporter = new NightlyReporter({ broker, portfolio, notifier, journal });
 bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message }));
 setInterval(() => bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message })), config.loopMs);

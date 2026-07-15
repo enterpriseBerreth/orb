@@ -1,0 +1,1 @@
+export const researchLiquidUniverse = Object.freeze(['SPY', 'QQQ', 'IWM', 'DIA', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'GOOGL', 'TSLA', 'AMD', 'NFLX', 'AVGO', 'ORCL', 'PLTR', 'COIN', 'SMCI', 'JPM', 'BAC', 'XOM', 'CVX', 'UNH', 'LLY', 'COST', 'WMT', 'BRK.B', 'CRM', 'ADBE', 'INTC']);
