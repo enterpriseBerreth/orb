@@ -20,5 +20,6 @@ export const config = Object.freeze({
   alpacaApiSecret: process.env.ALPACA_API_SECRET ?? '',
   alpacaTradingBaseUrl: process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.alpaca.markets',
   alpacaDataFeed: process.env.ALPACA_DATA_FEED ?? 'iex',
+  databaseUrl: process.env.DATABASE_URL ?? '',
   symbols: (process.env.SYMBOLS ?? 'NVDA,TSLA,AMD,MSFT,AAPL,META,AMZN,GOOGL,NFLX,COIN,PLTR,SMCI').split(',').map((symbol) => symbol.trim()).filter(Boolean)
 });
