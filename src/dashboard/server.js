@@ -6,6 +6,7 @@ export function createServer({ bot, broker, journal, persistence }) {
     if (req.url === '/status') await broker.account();
     const body = req.url === '/health' ? { status: 'ok' }
       : req.url === '/status' ? { bot: 'running', paperTrading: true, broker: broker.status(), metrics: calculateMetrics(broker.orders), candidates: bot.lastScan, events: journal.recent(20) }
+      : url.pathname === '/history/summary' ? { summary: await persistence.summarizeTradingDate(url.searchParams.get('date')) }
       : url.pathname === '/history' ? { events: url.searchParams.get('date') ? await persistence.eventsForTradingDate(url.searchParams.get('date')) : await persistence.recentEvents(200) }
       : null;
     if (req.url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(dashboardHtml); }

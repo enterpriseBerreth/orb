@@ -8,6 +8,7 @@ export class NullPersistence {
   async getOpeningRange() { return null; }
   async recentEvents() { return []; }
   async eventsForTradingDate() { return []; }
+  async summarizeTradingDate() { return []; }
 }
 
 export class PostgresPersistence {
@@ -43,6 +44,12 @@ export class PostgresPersistence {
       WHERE (occurred_at AT TIME ZONE 'America/New_York')::date = $1
       ORDER BY occurred_at DESC LIMIT $2`, [tradingDate, limit]);
     return rows.map((row) => ({ id: row.id, at: row.occurred_at, type: row.event_type, ...row.payload }));
+  }
+  async summarizeTradingDate(tradingDate) {
+    const { rows } = await this.pool.query(`SELECT event_type, COALESCE(payload->>'reason', payload->>'decision', '') AS detail, count(*)::int AS count
+      FROM journal_events WHERE (occurred_at AT TIME ZONE 'America/New_York')::date = $1
+      GROUP BY event_type, detail ORDER BY count DESC`, [tradingDate]);
+    return rows.map((row) => ({ type: row.event_type, detail: row.detail, count: row.count }));
   }
 }
 
