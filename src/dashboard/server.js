@@ -3,7 +3,9 @@ import { calculateMetrics } from '../analytics/metrics.js';
 export function createServer({ bot, broker, journal, persistence }) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    if (req.url === '/status') await broker.account();
+    // Status must never make a broker outage take down the HTTP process. The
+    // broker exposes its most recent account and explicit health state instead.
+    if (req.url === '/status' && broker.isAvailable?.()) await broker.account().catch(() => {});
     const body = req.url === '/health' ? { status: 'ok' }
       : req.url === '/status' ? { bot: 'running', paperTrading: true, broker: broker.status(), metrics: calculateMetrics(broker.orders), candidates: bot.lastScan, events: journal.recent(20) }
       : url.pathname === '/history/summary' ? { summary: await persistence.summarizeTradingDate(url.searchParams.get('date')) }
