@@ -17,13 +17,14 @@ if (!config.paperTrading) throw new Error('Live trading is disabled in this star
 if ((config.marketDataProvider === 'alpaca' || config.broker === 'alpaca-paper') && (!config.alpacaApiKey || !config.alpacaApiSecret)) throw new Error('Alpaca API credentials are required for real market-data paper trading.');
 const persistence = createPersistence(config.databaseUrl); await persistence.initialize();
 const journal = new TradeJournal({ persistence }); const portfolio = new PortfolioManager({ initialCapital: config.initialCapital });
+portfolio.hydrate(await persistence.loadVirtualAccount()); portfolio.onChange = (state) => persistence.saveVirtualAccount(state).catch((error) => journal.record('virtual_account_persistence_error', { message: error.message }));
 const broker = config.broker === 'alpaca-paper' ? new AlpacaPaperBroker({ apiKey: config.alpacaApiKey, apiSecret: config.alpacaApiSecret, baseUrl: config.alpacaTradingBaseUrl, portfolio, estimatedFeesBps: config.estimatedFeesBps, maxFailures: config.maxBrokerFailures, retryCooldownMs: config.brokerRetryCooldownMs }) : new PaperBroker({ portfolio });
 const feed = config.marketDataProvider === 'alpaca' ? new AlpacaDataProvider({ apiKey: config.alpacaApiKey, apiSecret: config.alpacaApiSecret, symbols: config.symbols, feed: config.alpacaDataFeed }) : new SimulatedMarketDataFeed(config.symbols);
 const notifier = new TelegramNotifier({ token: config.telegramBotToken, chatId: config.telegramChatId });
 if (broker.discoverBrokerPositions) {
   try { await broker.discoverBrokerPositions(); } catch (error) { journal.record('broker_startup_check_failed', { message: error.message }); await notifier.send(`ORB broker startup alert: ${error.message}. Position safety checks are paused until connectivity recovers.`).catch(() => {}); }
 }
-const bot = new TradingBot({ feed, scanner: new MarketScanner({ topN: config.scannerTopN }), journal, persistence, notifier, tradeCandidates: config.tradeCandidates, breakoutBufferPercent: config.orbBreakoutBufferPercent, exitConfig: config, orderManager: new OrderManager({ broker, journal, risk: new RiskManager(config) }) });
+const bot = new TradingBot({ feed, scanner: new MarketScanner({ topN: config.scannerTopN, minRelativeVolume: config.minRelativeVolume }), journal, persistence, notifier, tradeCandidates: config.tradeCandidates, breakoutBufferPercent: config.orbBreakoutBufferPercent, exitConfig: config, orderManager: new OrderManager({ broker, journal, risk: new RiskManager(config) }) });
 const nightlyReporter = new NightlyReporter({ broker, portfolio, notifier, journal });
 bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message }));
 setInterval(() => bot.cycle().catch((error) => journal.record('cycle_error', { message: error.message })), config.loopMs);

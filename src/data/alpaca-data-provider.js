@@ -15,8 +15,10 @@ export class AlpacaDataProvider extends MarketDataProvider {
       const volume = Number(snapshot.dailyBar?.v ?? snapshot.minuteBar?.v ?? 0);
       if (!Number.isFinite(price) || !price) return [];
       const premarketGapPercent = previousClose ? ((price - previousClose) / previousClose) * 100 : 0;
-      // Daily volume is intentionally a conservative proxy until premarket-volume data is added.
-      const relativeVolume = Math.max(1, Number((volume / Math.max(1, snapshot.prevDailyBar?.v ?? volume)).toFixed(2)));
+      // Compare volume accumulated so far with the previous session's expected
+      // volume at this same point in the regular session, not the full-day total.
+      const expectedVolume = Number(snapshot.prevDailyBar?.v ?? volume) * usMinutesSinceOpen(snapshot.latestTrade?.t ?? new Date()) / 390;
+      const relativeVolume = Number((volume / Math.max(1, expectedVolume)).toFixed(2));
       const bid = Number(snapshot.latestQuote?.bp); const ask = Number(snapshot.latestQuote?.ap);
       const spreadBps = bid > 0 && ask > bid ? Number((((ask - bid) / ((ask + bid) / 2)) * 10_000).toFixed(2)) : null;
       return [{ symbol, price, volume, relativeVolume, premarketGapPercent: Number(premarketGapPercent.toFixed(2)), expectedVolatility: Number((Math.abs(premarketGapPercent) * relativeVolume).toFixed(2)), liquidity: snapshot.latestQuote ? 'high' : 'unknown', bid, ask, spreadBps, timestamp: snapshot.latestTrade?.t ?? new Date().toISOString() }];
@@ -29,4 +31,8 @@ export class AlpacaDataProvider extends MarketDataProvider {
     const { bars = [] } = await response.json();
     return bars.map((bar) => ({ symbol, open: bar.o, high: bar.h, low: bar.l, close: bar.c, volume: bar.v, timestamp: bar.t }));
   }
+}
+function usMinutesSinceOpen(timestamp) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(timestamp)).filter(({ type }) => type !== 'literal').map(({ type, value }) => [type, value]));
+  return Math.max(1, Math.min(390, Number(parts.hour) * 60 + Number(parts.minute) - 570));
 }

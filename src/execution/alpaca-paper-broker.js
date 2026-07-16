@@ -19,7 +19,7 @@ export class AlpacaPaperBroker extends Broker {
   async account() {
     const account = await this.request('/v2/account');
     const virtual = this.portfolio?.snapshot();
-    this.lastAccount = { realizedPnl: virtual?.realizedPnl ?? 0, consecutiveLosses: this.consecutiveLosses(), openPositions: this.openPositions.size, openRisk: 0, openCorrelationGroups: [...this.openPositions.values()].map((position) => position.correlationGroup).filter(Boolean), capital: virtual?.capital ?? Number(account.equity), buyingPower: virtual?.capital ?? Number(account.buying_power), brokerEquity: Number(account.equity), virtualCapital: true };
+    this.lastAccount = { realizedPnl: virtual?.dailyPnl ?? 0, consecutiveLosses: virtual?.consecutiveLosses ?? this.consecutiveLosses(), openPositions: this.openPositions.size, openRisk: 0, openCorrelationGroups: [...this.openPositions.values()].map((position) => position.correlationGroup).filter(Boolean), capital: virtual?.capital ?? Number(account.equity), buyingPower: virtual?.capital ?? Number(account.buying_power), brokerEquity: Number(account.equity), virtualCapital: true };
     return this.lastAccount;
   }
   hasOpenPosition(symbol) { return this.openPositions.has(symbol); }

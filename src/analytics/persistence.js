@@ -9,6 +9,8 @@ export class NullPersistence {
   async recentEvents() { return []; }
   async eventsForTradingDate() { return []; }
   async summarizeTradingDate() { return []; }
+  async loadVirtualAccount() { return null; }
+  async saveVirtualAccount() {}
 }
 
 export class PostgresPersistence {
@@ -21,6 +23,9 @@ export class PostgresPersistence {
     CREATE TABLE IF NOT EXISTS opening_ranges (
       trading_date DATE NOT NULL, symbol TEXT NOT NULL, high NUMERIC NOT NULL, low NUMERIC NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (trading_date, symbol)
+    );
+    CREATE TABLE IF NOT EXISTS virtual_account_state (
+      state_key TEXT PRIMARY KEY, state JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );`);
   }
   async recordEvent(event) {
@@ -51,6 +56,8 @@ export class PostgresPersistence {
       GROUP BY event_type, detail ORDER BY count DESC`, [tradingDate]);
     return rows.map((row) => ({ type: row.event_type, detail: row.detail, count: row.count }));
   }
+  async loadVirtualAccount() { const { rows } = await this.pool.query("SELECT state FROM virtual_account_state WHERE state_key = 'paper-account'"); return rows[0]?.state ?? null; }
+  async saveVirtualAccount(state) { await this.pool.query(`INSERT INTO virtual_account_state (state_key, state) VALUES ('paper-account', $1) ON CONFLICT (state_key) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()`, [JSON.stringify(state)]); }
 }
 
 export function createPersistence(connectionString) { return connectionString ? new PostgresPersistence(connectionString) : new NullPersistence(); }
