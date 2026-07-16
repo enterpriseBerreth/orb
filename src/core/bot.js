@@ -4,20 +4,12 @@ import { easternTradingDate, isUsOpeningHour, usMarketSessionPhase } from './mar
 import { analyzeRegime } from '../research/regime-analyzer.js';
 import { buildExitPlan } from '../risk/exit-plan.js';
 export class TradingBot {
-  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, exitConfig = {}, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, exitConfig, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; }
+  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, exitConfig = {}, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, exitConfig, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; this.lastBrokerAlert = 0; }
   async cycle(date = new Date()) {
-    const universe = await this.feed.getSnapshot(); const ranked = this.scanner.rank(universe); this.lastUniverse = universe; this.lastScan = ranked;
     const phase = usMarketSessionPhase(date); const tradingDate = easternTradingDate(date);
-    for (const trade of await this.orderManager.broker.reconcileExits?.() ?? []) {
-      this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade);
-    }
-    if (this.orderManager.broker.usesNativeBrackets) for (const position of [...this.orderManager.broker.openPositions.values()]) {
-      const heldMinutes = (date - new Date(position.filledAt)) / 60_000;
-      if (position.exitPlan?.maxHoldMinutes && heldMinutes >= position.exitPlan.maxHoldMinutes) {
-        const trade = await this.orderManager.close(position.symbol, position.price, 'Time stop: bracket was closed after the maximum validated holding period.');
-        if (trade) { this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade); }
-      }
-    }
+    await this.manageOpenPositions(date, phase);
+    if (phase === 'closed') { this.journal.record('scan_complete', { candidates: 0, entriesAllowed: false, reason: 'outside-us-opening-hour' }); return []; }
+    const universe = await this.feed.getSnapshot(); const ranked = this.scanner.rank(universe); this.lastUniverse = universe; this.lastScan = ranked;
     if (phase === 'building-opening-range') {
       if (this.rangeDate !== tradingDate) { this.ranges.clear(); this.rangeDate = tradingDate; }
       for (const market of universe) {
@@ -48,12 +40,33 @@ export class TradingBot {
       const bars = await this.feed.getBars(market.symbol, 30); const regime = analyzeRegime(market, bars, date);
       const signal = evaluateOrb({ ...market, openingRange: range, breakoutBufferPercent: this.breakoutBufferPercent });
       if (!signal) { this.recordSkip(market, rank + 1, 'no-confirmed-buffered-breakout', range); continue; }
-      if (!passesFilters(signal, market)) { this.recordSkip(market, rank + 1, 'strategy-filter-rejected', range); continue; }
       const exitPlan = buildExitPlan(signal, regime, this.exitConfig); const enrichedSignal = { ...signal, stopPrice: exitPlan.stopPrice, exitPlan, ...regime, scannerRank: rank + 1, scannerScore: market.score };
+      if (!passesFilters(enrichedSignal, market, this.exitConfig)) { this.recordSkip(market, rank + 1, 'strategy-filter-rejected', range); continue; }
       const outcome = await this.orderManager.execute(enrichedSignal);
       this.journal.record('signal_evaluated', { symbol: market.symbol, rank: rank + 1, decision: outcome?.type ?? outcome?.status ?? 'submitted', signal: enrichedSignal, range, regime });
     }
     this.journal.record('scan_complete', { candidates: ranked.length, focusedCandidates: Math.min(ranked.length, this.tradeCandidates), entriesAllowed: true, openingRangeReady: this.rangeDate === tradingDate }); return ranked;
   }
+  async manageOpenPositions(date, phase) {
+    const broker = this.orderManager.broker;
+    if (!broker.openPositions?.size || !broker.isAvailable?.()) return;
+    try {
+      for (const trade of await broker.reconcileExits?.() ?? []) { this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade); }
+      for (const position of [...broker.openPositions.values()]) {
+        const heldMinutes = (date - new Date(position.filledAt)) / 60_000;
+        const bracket = position.recovered ? { active: false } : broker.usesNativeBrackets ? await broker.verifyBracket(position) : { active: true };
+        if (!bracket.active) { this.journal.record('position_safety_alert', { symbol: position.symbol, reason: 'missing-active-bracket' }); await this.notifier?.send(`ORB safety alert: ${position.symbol} has no active protective bracket.`); }
+        const afterWindow = phase === 'closed' || minutesAfterOpen(date) >= this.exitConfig.emergencyFlattenMinutesAfterOpen;
+        if (!bracket.active || heldMinutes >= position.exitPlan?.maxHoldMinutes || afterWindow) {
+          const reason = !bracket.active ? 'Emergency exit: protective bracket missing.' : afterWindow ? 'Emergency flatten: outside permitted opening-session holding window.' : 'Emergency time stop: maximum holding period exceeded.';
+          const trade = await this.orderManager.close(position.symbol, position.price, reason);
+          if (trade) { this.journal.record('position_closed', { trade }); await this.notifier?.sendTradeExit(trade); }
+        }
+      }
+    } catch (error) {
+      if (Date.now() - this.lastBrokerAlert >= this.exitConfig.brokerRetryCooldownMs) { this.lastBrokerAlert = Date.now(); this.journal.record('broker_safety_error', { message: error.message }); await this.notifier?.send(`ORB broker safety alert: ${error.message}. New trade execution is paused.`); }
+    }
+  }
   recordSkip(market, rank, reason, range) { this.journal.record('signal_skipped', { symbol: market.symbol, rank, reason, price: market.price, score: market.score, relativeVolume: market.relativeVolume, expectedVolatility: market.expectedVolatility, range }); }
 }
+function minutesAfterOpen(date) { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date).filter(({ type }) => type !== 'literal').map(({ type, value }) => [type, value])); return Number(parts.hour) * 60 + Number(parts.minute) - 570; }

@@ -5,5 +5,5 @@ export function buildExitPlan(signal, regime, { stopAtrMultiplier = 1, targetRMu
   const riskPerShare = Math.max(structuralRisk, volatilityRisk);
   const stopPrice = Number((signal.price - direction * riskPerShare).toFixed(2));
   const targetPrice = Number((signal.price + direction * riskPerShare * targetRMultiple).toFixed(2));
-  return { stopPrice, targetPrice, riskPerShare, maxHoldMinutes, trailingActivationR: 1, partialTakeProfitR: 1 };
+  return { stopPrice, targetPrice, riskPerShare, maxHoldMinutes, trailingActivationR: 1, partialTakeProfitR: 1, moveStopToBreakevenAtR: 1, adverseMoveMinutes: 5, adverseMoveThresholdR: 0.5 };
 }

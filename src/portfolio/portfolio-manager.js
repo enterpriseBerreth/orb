@@ -5,6 +5,11 @@ export class PortfolioManager {
     if (!existing) this.positions.set(fill.symbol, { symbol: fill.symbol, side: fill.side, quantity: fill.quantity, averagePrice: fill.price, stopPrice: fill.stopPrice });
     return this.snapshot();
   }
+  applyClosedTrade(trade) {
+    if (this.positions.has(trade.symbol)) return this.close(trade.symbol, trade.exitPrice);
+    this.closedPnl += Number(trade.realizedPnl ?? 0);
+    return this.snapshot();
+  }
   close(symbol, exitPrice) {
     const position = this.positions.get(symbol);
     if (!position) return null;

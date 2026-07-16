@@ -1,7 +1,8 @@
 export class RiskManager {
-  constructor({ maxDailyLoss, maxOpenPositions, riskPerTradePercent = 1, initialCapital = 1_000, maxPortfolioRisk = Infinity, maxPerCorrelationGroup = 1 }) { Object.assign(this, { maxDailyLoss, maxOpenPositions, riskPerTradePercent, initialCapital, maxPortfolioRisk, maxPerCorrelationGroup }); }
+  constructor({ maxDailyLoss, maxOpenPositions, riskPerTradePercent = 1, initialCapital = 1_000, maxPortfolioRisk = Infinity, maxPerCorrelationGroup = 1, maxConsecutiveLosses = 2 }) { Object.assign(this, { maxDailyLoss, maxOpenPositions, riskPerTradePercent, initialCapital, maxPortfolioRisk, maxPerCorrelationGroup, maxConsecutiveLosses }); }
   approve(signal, account) {
     if (account.realizedPnl <= -this.maxDailyLoss) return { approved: false, reason: 'daily-loss-limit' };
+    if ((account.consecutiveLosses ?? 0) >= this.maxConsecutiveLosses) return { approved: false, reason: 'consecutive-loss-circuit-breaker' };
     if (account.openPositions >= this.maxOpenPositions) return { approved: false, reason: 'position-limit' };
     if ((account.openRisk ?? 0) >= this.maxPortfolioRisk) return { approved: false, reason: 'portfolio-risk-limit' };
     if (signal.correlationGroup && (account.openCorrelationGroups ?? []).filter((group) => group === signal.correlationGroup).length >= this.maxPerCorrelationGroup) return { approved: false, reason: 'correlation-group-limit' };
