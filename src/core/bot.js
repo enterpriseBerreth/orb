@@ -40,7 +40,7 @@ export class TradingBot {
       const bars = await this.feed.getBars(market.symbol, 30); const regime = analyzeRegime(market, bars, date);
       const signal = evaluateOrb({ ...market, openingRange: range, breakoutBufferPercent: this.breakoutBufferPercent });
       if (!signal) { this.recordSkip(market, rank + 1, 'no-confirmed-buffered-breakout', range); continue; }
-      const exitPlan = buildExitPlan(signal, regime, this.exitConfig); const enrichedSignal = { ...signal, stopPrice: exitPlan.stopPrice, exitPlan, ...regime, scannerRank: rank + 1, scannerScore: market.score };
+      const exitPlan = buildExitPlan(signal, regime, this.exitConfig); const enrichedSignal = { ...signal, stopPrice: exitPlan.stopPrice, exitPlan, ...regime, bid: market.bid, ask: market.ask, spreadBps: market.spreadBps, scannerRank: rank + 1, scannerScore: market.score };
       if (!passesFilters(enrichedSignal, market, this.exitConfig)) { this.recordSkip(market, rank + 1, 'strategy-filter-rejected', range); continue; }
       const outcome = await this.orderManager.execute(enrichedSignal);
       this.journal.record('signal_evaluated', { symbol: market.symbol, rank: rank + 1, decision: outcome?.type ?? outcome?.status ?? 'submitted', signal: enrichedSignal, range, regime });

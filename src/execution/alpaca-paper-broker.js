@@ -1,8 +1,8 @@
 import { Broker } from './broker.js';
 
 export class AlpacaPaperBroker extends Broker {
-  constructor({ apiKey, apiSecret, baseUrl, portfolio, fetchFn = globalThis.fetch, pollMs = 500, maxPolls = 20, maxFailures = 3, retryCooldownMs = 300000 }) {
-    super(); Object.assign(this, { apiKey, apiSecret, baseUrl, portfolio, fetchFn, pollMs, maxPolls, maxFailures, retryCooldownMs }); this.usesNativeBrackets = true; this.orders = []; this.openPositions = new Map(); this.consecutiveFailures = 0; this.unavailableUntil = 0; this.lastError = null; this.lastAccount = { realizedPnl: 0, openPositions: 0, openRisk: 0, capital: portfolio?.snapshot().capital ?? 0 };
+  constructor({ apiKey, apiSecret, baseUrl, portfolio, estimatedFeesBps = 1, fetchFn = globalThis.fetch, pollMs = 500, maxPolls = 20, maxFailures = 3, retryCooldownMs = 300000 }) {
+    super(); Object.assign(this, { apiKey, apiSecret, baseUrl, portfolio, estimatedFeesBps, fetchFn, pollMs, maxPolls, maxFailures, retryCooldownMs }); this.usesNativeBrackets = true; this.orders = []; this.openPositions = new Map(); this.consecutiveFailures = 0; this.unavailableUntil = 0; this.lastError = null; this.lastAccount = { realizedPnl: 0, openPositions: 0, openRisk: 0, capital: portfolio?.snapshot().capital ?? 0 };
   }
   headers() { return { 'APCA-API-KEY-ID': this.apiKey, 'APCA-API-SECRET-KEY': this.apiSecret, 'content-type': 'application/json' }; }
   async request(path, options = {}) {
@@ -36,10 +36,11 @@ export class AlpacaPaperBroker extends Broker {
   async submit(order) {
     const capitalBefore = (await this.account()).capital;
     const bracket = order.exitPlan ? { order_class: 'bracket', take_profit: { limit_price: String(order.exitPlan.targetPrice) }, stop_loss: { stop_price: String(order.exitPlan.stopPrice) } } : {};
-    const submitted = await this.request('/v2/orders', { method: 'POST', body: JSON.stringify({ symbol: order.symbol, qty: String(order.quantity), side: order.side, type: 'market', time_in_force: 'day', client_order_id: crypto.randomUUID(), ...bracket }) });
+    const submittedAt = new Date().toISOString(); const submitted = await this.request('/v2/orders', { method: 'POST', body: JSON.stringify({ symbol: order.symbol, qty: String(order.quantity), side: order.side, type: 'market', time_in_force: 'day', client_order_id: crypto.randomUUID(), ...bracket }) });
     const filled = await this.waitForTerminalOrder(submitted.id);
     if (filled.status !== 'filled') throw new Error(`Alpaca order ${filled.id} ended as ${filled.status}`);
-    const actualPrice = Number(filled.filled_avg_price); const fill = { ...order, id: filled.id, status: 'filled', quantity: Number(filled.filled_qty), price: actualPrice, capitalBefore, filledAt: filled.filled_at, fillQuality: { decisionPrice: order.price, fillPrice: actualPrice, slippage: Number((actualPrice - order.price).toFixed(4)), slippageBps: Number((((actualPrice - order.price) / order.price) * 10_000).toFixed(2)) } };
+    const actualPrice = Number(filled.filled_avg_price); const filledAt = filled.filled_at ?? new Date().toISOString(); const notional = actualPrice * Number(filled.filled_qty);
+    const fill = { ...order, id: filled.id, status: 'filled', quantity: Number(filled.filled_qty), price: actualPrice, capitalBefore, submittedAt, filledAt, fillQuality: { decisionPrice: order.price, fillPrice: actualPrice, bid: order.bid ?? null, ask: order.ask ?? null, quotedSpreadBps: order.spreadBps ?? null, slippage: Number((actualPrice - order.price).toFixed(4)), slippageBps: Number((((actualPrice - order.price) / order.price) * 10_000).toFixed(2)), estimatedEntryFee: Number((notional * this.estimatedFeesBps / 10_000).toFixed(4)), orderToFillMs: Math.max(0, new Date(filledAt) - new Date(submittedAt)) } };
     this.orders.unshift(fill); this.openPositions.set(fill.symbol, fill); this.portfolio?.applyFill(fill); await this.account(); return fill;
   }
   async reconcileExits() {
