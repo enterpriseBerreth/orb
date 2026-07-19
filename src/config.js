@@ -27,6 +27,7 @@ export const config = Object.freeze({
   scannerTopN: number(process.env.SCANNER_TOP_N, 10),
   tradeCandidates: number(process.env.TRADE_CANDIDATES, 3),
   orbBreakoutBufferPercent: number(process.env.ORB_BREAKOUT_BUFFER_PERCENT, 0.05),
+  orbConfirmationBars: number(process.env.ORB_CONFIRMATION_BARS, 2),
   initialCapital: number(process.env.INITIAL_CAPITAL, 1_000),
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',

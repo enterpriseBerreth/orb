@@ -1,14 +1,14 @@
-import { evaluateOrb } from '../strategies/orb.js';
+import { evaluateOrb, hasConfirmedOrbBreak } from '../strategies/orb.js';
 import { passesFilters } from '../filters/signal-filter.js';
 import { easternTradingDate, isUsOpeningHour, usMarketSessionPhase } from './market-session.js';
 import { analyzeRegime } from '../research/regime-analyzer.js';
 import { buildExitPlan } from '../risk/exit-plan.js';
 export class TradingBot {
-  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, exitConfig = {}, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, exitConfig, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; this.lastBrokerAlert = 0; }
+  constructor({ feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates = 3, breakoutBufferPercent = 0.05, exitConfig = {}, marketOpenCheck = isUsOpeningHour }) { Object.assign(this, { feed, scanner, orderManager, journal, persistence, notifier, tradeCandidates, breakoutBufferPercent, exitConfig, marketOpenCheck }); this.ranges = new Map(); this.lastScan = []; this.lastUniverse = []; this.rangeDate = null; this.lastBrokerAlert = 0; this.lastClosedLogMinute = null; }
   async cycle(date = new Date()) {
     const phase = usMarketSessionPhase(date); const tradingDate = easternTradingDate(date);
     await this.manageOpenPositions(date, phase);
-    if (phase === 'closed') { this.journal.record('scan_complete', { candidates: 0, entriesAllowed: false, reason: 'outside-us-opening-hour' }); return []; }
+    if (phase === 'closed') { this.recordClosedSession(date); return []; }
     const universe = await this.feed.getSnapshot(); const ranked = this.scanner.rank(universe); this.lastUniverse = universe; this.lastScan = ranked;
     if (phase === 'building-opening-range') {
       if (this.rangeDate !== tradingDate) { this.ranges.clear(); this.rangeDate = tradingDate; }
@@ -40,6 +40,7 @@ export class TradingBot {
       const bars = await this.feed.getBars(market.symbol, 30); const regime = analyzeRegime(market, bars, date);
       const signal = evaluateOrb({ ...market, openingRange: range, breakoutBufferPercent: this.breakoutBufferPercent });
       if (!signal) { this.recordSkip(market, rank + 1, 'no-confirmed-buffered-breakout', range); continue; }
+      if (!hasConfirmedOrbBreak(signal, range, bars, this.breakoutBufferPercent, this.exitConfig.orbConfirmationBars)) { this.recordSkip(market, rank + 1, 'breakout-awaiting-multi-bar-confirmation', range); continue; }
       const exitPlan = buildExitPlan(signal, regime, this.exitConfig); const enrichedSignal = { ...signal, stopPrice: exitPlan.stopPrice, exitPlan, ...regime, bid: market.bid, ask: market.ask, spreadBps: market.spreadBps, scannerRank: rank + 1, scannerScore: market.score };
       if (!passesFilters(enrichedSignal, market, this.exitConfig)) { this.recordSkip(market, rank + 1, 'strategy-filter-rejected', range); continue; }
       const outcome = await this.orderManager.execute(enrichedSignal);
@@ -47,6 +48,7 @@ export class TradingBot {
     }
     this.journal.record('scan_complete', { candidates: ranked.length, focusedCandidates: Math.min(ranked.length, this.tradeCandidates), entriesAllowed: true, openingRangeReady: this.rangeDate === tradingDate }); return ranked;
   }
+  recordClosedSession(date) { const minute = Math.floor(date.getTime() / 60_000); if (minute === this.lastClosedLogMinute) return; this.lastClosedLogMinute = minute; this.journal.record('scan_complete', { candidates: 0, entriesAllowed: false, reason: 'outside-us-opening-hour' }); }
   async manageOpenPositions(date, phase) {
     const broker = this.orderManager.broker;
     if (!broker.openPositions?.size || !broker.isAvailable?.()) return;
